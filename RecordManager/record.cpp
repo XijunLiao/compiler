@@ -108,6 +108,68 @@ vector<map<string, BaseData*>> Table::queryAll(vector<string> &attrNames) {
     return results;
 }
 
+vector<map<string, BaseData *>> Table::query(vector<string> &attrNames, string &toCheck, bool (*check)(char * data) ) {
+    vector<map<string, BaseData*>> results;
+    auto list = manager->getRePosAll();
+    int off = 0;
+    int size = 0;
+    for(auto it : list){
+        auto nullAttrs = getNullAttr(it + attrSize);    //首先必须知道为NULL的数组
+        /**
+         * 当被检查属性发现为NULL时，现在有两种情况，一是谓词执行的过滤与NULL无关，
+         * 另一种情况是谓词本身就是旨在搜寻记录中为NULL或不为NULL的字段，
+         * 我的解决方案如下：
+         * 当发现被检查属性为NULL时，将前四个字节置0，
+         * 谓词中对应的处理：
+         * char * ptr = {所传入数据的指针};
+         * 表达式为ptr == nullptr
+         */
+        off = get<ATTR_OFFSET>((*columns.find(toCheck)).second);    //被检查属性在记录中的偏移
+        if(find(nullAttrs.begin(), nullAttrs.end(), toCheck) != nullAttrs.end()){
+            if( !check(nullptr) ){
+                continue;
+            }
+        }
+        else {
+            //正常检查谓词，为假则跳过这个记录，不再执行接下来的任务
+            if( !check(it + off) ){
+                continue;
+            }
+        }
+        //开始打包这个记录中需要的属性
+        map<string, BaseData*> re;
+        for(auto attrName : attrNames){
+            //判断空位图
+            if(find(nullAttrs.begin(), nullAttrs.end(), attrName) != nullAttrs.end()){
+                re.insert(pair<string, BaseData*>(attrName, nullptr));
+                continue;
+            }
+            else {
+                off = get<ATTR_OFFSET>((*columns.find(attrName)).second);
+                size = get<ATTR_SIZE>((*columns.find(attrName)).second);
+                switch (get<ATTR_TYPE>((*columns.find(attrName)).second)) {
+                    case DB_STRING: {
+                        re.insert(pair<string, BaseData*>(attrName, new StringData(it+off, size)));
+                        break;
+                    }
+                    case DB_INT: {
+                        re.insert(pair<string, BaseData*>(attrName, new IntData(GET_INT(it+off))));
+                        break;
+                    }
+                    case DB_FLOAT: {
+                        re.insert(pair<string, BaseData*>(attrName, new FloatData(GET_FLOAT(it+off))));
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+        }
+        results.push_back(re);
+    }
+    return results;
+}
+
 /**
  * 对所有属性进行插入。
  * @note 必须先检查过是否所有属性都制定了值，以及主键合法性（不能为NULL）。
@@ -191,7 +253,35 @@ vector<char *> Table::queryAllPri(string &attrName) {
     }
     return pos;
 }
-
+vector<char *> Table::queryPri(string &toCheck, bool (*check)(char * data)){
+    vector<char *> results;
+    auto list = manager->getRePosAll();
+    int off = 0;
+    for(auto it : list){
+        auto nullAttrs = getNullAttr(it + attrSize);    //首先必须知道为NULL的数组
+        /**
+         * 当被检查属性发现为NULL时，现在有两种情况，一是谓词执行的过滤与NULL无关，
+         * 另一种情况是谓词本身就是旨在搜寻记录中为NULL或不为NULL的字段，
+         * 我的解决方案如下：
+         * 当发现被检查属性为NULL时，将前四个字节置0，
+         * 谓词中对应的处理：
+         * char * ptr = {所传入数据的指针};
+         * 表达式为(int *)(*ptr) == NULL
+         * 建议不要写成nullptr，虽然在测试中两种都得到了正确结果，但是NULL更能确信
+         */
+        off = get<ATTR_OFFSET>((*columns.find(toCheck)).second);    //被检查属性在记录中的偏移
+        if(find(nullAttrs.begin(), nullAttrs.end(), toCheck) != nullAttrs.end()){
+            GET_INT(it + off) = 0;
+        }
+        //开始检查谓词，为假则跳过这个记录，不再执行接下来的任务
+        if( !check(it + off) ){
+            continue;
+        }
+        //将记录的首地址返回
+        results.push_back(it);
+    }
+    return results;
+}
 
 void Table::setBitMap(char * source, int size, int position){
     if(position >= size * 8){
@@ -228,4 +318,17 @@ vector<string> Table::getNullAttr(char* bitMap){
             x = x << 1;
         }
     }
+    return pos;
 }
+
+int Table::modifyRecord(string &attrName, char *newData, bool (*check)(char * data)) {
+    auto toBeModified = queryPri(attrName, check);
+    int off = get<ATTR_OFFSET>((*columns.find(attrName)).second);
+    int size = get<ATTR_SIZE>((*columns.find(attrName)).second);
+    for(auto &ptr : toBeModified){
+        memcpy(ptr + off, newData, size);
+    }
+    return toBeModified.size();
+}
+
+

@@ -87,6 +87,8 @@ public:
      */
     vector<map<string, BaseData*>> queryAll(vector<string> &attrNames);
 
+    vector<map<string, BaseData*>> query(vector<string> &attrNames, string &toCheck, bool (*check)(char *));
+
     /**
      * 用于用户指定了插入属性的键值对时的插入。<br>
      * Insert while using attribute names and attribute values.
@@ -100,7 +102,9 @@ public:
      * @return 返回0则插入失败，一般是由于违背了primary key或者unique关系。<br>0 --- failure, generally due to a violation of the primary key or unique rule.
      */
     int insertRecord(vector<char*> &record);
+    int modifyRecord(string& attrName, char* newData, bool (*check)(char* data));
 
+    vector<char *> queryPri(string &toCheck, bool (*check)(char *));
 };
 
 #endif //RECORDMANAGER_RECORD_H
