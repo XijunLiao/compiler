@@ -102,7 +102,7 @@ public:
      * @return 返回0则插入失败，一般是由于违背了primary key或者unique关系。<br>0 --- failure, generally due to a violation of the primary key or unique rule.
      */
     int insertRecord(vector<char*> &record);
-    int modifyRecord(string& attrName, char* newData, bool (*check)(char* data));
+    int modifyRecord(string& attrName, char* newData, string& toCheck, bool (*check)(char* data));
 
     vector<char *> queryPri(string &toCheck, bool (*check)(char *));
 };

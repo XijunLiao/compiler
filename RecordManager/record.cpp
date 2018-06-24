@@ -321,8 +321,8 @@ vector<string> Table::getNullAttr(char* bitMap){
     return pos;
 }
 
-int Table::modifyRecord(string &attrName, char *newData, bool (*check)(char * data)) {
-    auto toBeModified = queryPri(attrName, check);
+int Table::modifyRecord(string &attrName, char *newData, string& toCheck, bool (*check)(char * data)) {
+    auto toBeModified = queryPri(toCheck, check);
     int off = get<ATTR_OFFSET>((*columns.find(attrName)).second);
     int size = get<ATTR_SIZE>((*columns.find(attrName)).second);
     for(auto &ptr : toBeModified){
